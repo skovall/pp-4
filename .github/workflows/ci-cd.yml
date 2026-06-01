@@ -59,8 +59,7 @@ jobs:
           kill %1
       
       - name: Static analysis (clang-tidy)
-        run: |
-          clang-tidy src/main.cpp -- -I.
+        run: clang-tidy src/main.cpp -- -I.
 
   docker-build-push:
     needs: build-and-test
@@ -141,7 +140,7 @@ jobs:
           docker run -d --name app-green -p 8081:8080 $IMAGE
           sleep 5
           curl --retry 5 --retry-delay 2 --fail http://localhost:8081/health || exit 1
- 
+          
           docker stop app-blue 2>/dev/null || true
           
           docker run -d --name app-blue -p 8080:8080 $IMAGE
@@ -185,6 +184,7 @@ jobs:
           echo "Event: ${{ github.event_name }}" >> report.txt
           echo "Status: ${{ job.status }}" >> report.txt
           echo "Date: $(date)" >> report.txt
+          echo "==============================================" >> report.txt
       
       - name: Upload notification report
         uses: actions/upload-artifact@v4
