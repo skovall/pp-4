@@ -1,0 +1,33 @@
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Версия (тег образа) для отката'
+        required: true
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Convert repository name to lowercase
+        run: |
+          echo "REPO_LOWER=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+      
+      - name: Rollback to specified version
+        run: |
+          docker stop app-blue 2>/dev/null || true
+          docker run -d --name app-blue -p 8080:8080 ghcr.io/${{ env.REPO_LOWER }}:${{ github.event.inputs.version }}
+          sleep 5
+          curl --retry 5 --retry-delay 2 --fail http://localhost:8080/health || exit 1
+          echo "Rollback to ${{ github.event.inputs.version }} completed" >> rollback.log
+      
+      - name: Save rollback logs
+        run: docker logs app-blue > rollback_logs.txt
+      
+      - name: Upload rollback logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollback-logs
+          path: rollback_logs.txt
