@@ -1,1 +1,63 @@
+name: CI/CD Pipeline
 
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Версия образа для production (тег)'
+        required: false
+        default: 'latest'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang-tidy ccache wrk
+      
+      - name: Cache ccache
+        uses: actions/cache@v3
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'src/**') }}
+          restore-keys: ccache-${{ runner.os }}-
+      
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_FLAGS="-Wall -Wextra"
+      
+      - name: Build
+        run: cmake --build build
+      
+      - name: Run unit tests
+        run: cd build && ctest --output-on-failure
+      
+      - name: Run integration tests
+        run: |
+          ./build/app &
+          APP_PID=$!
+          sleep 3
+          curl --retry 5 --retry-delay 1 --fail http://localhost:8080/health || exit 1
+          bash tests/integration_test.sh
+          kill $APP_PID
+      
+      - name: Run load test (wrk)
+        run: |
+          ./build/app &
+          sleep 2
+          wrk -t2 -c100 -d10s http://localhost:8080/
+          kill %1
+      
+      - name: Static analysis (clang-tidy)
+        run: |
+          clang-tidy src/main.cpp -- -I.
